@@ -1,10 +1,12 @@
 import { useState, useRef, useEffect } from 'react';
+import axiosInstance from '../../axiosInstance'
 import { v4 as uuidv4 } from 'uuid';
 
 interface Message {
   id: string; // 更改为 string
   text?: string;
   imageUrl?: string;
+  videoUrl?: string;
   sender: string;
   senderId: string;
   msgType: string;
@@ -71,10 +73,33 @@ const App: React.FC = () => {
     };
   };
 
+  const fetchBlobData = async (fileId: string) => {
+    // const response = await fetch(`http://localhost:8080/api/file/${fileName}`);
+    const response = await axiosInstance.get(`/photos/download/${fileId}`, {
+      responseType: 'blob', // 设置响应类型为 blob
+    });
+    const blob = await response.data;
+    return URL.createObjectURL(blob);  // 创建一个对象 URL
+  };
+
+  const fetchMessages = async () => {
+    try {
+      const response = await axiosInstance.get('/message/getAllMsg');
+      const sortedFiles = response.data.data.sort((a: Message, b: Message) => {
+        return new Date(a['createDatetime']).getTime() - new Date(b['createDatetime']).getTime();
+      });
+      // const data = response.data.data;
+      setMessages(sortedFiles);
+    } catch (error) {
+      console.error("Error fetching messages:", error);
+    }
+  };
+
   // 初始化 WebSocket 连接
   useEffect(() => {
     createWebSocket();
     setUsername(localStorage.getItem('username'))
+    fetchMessages()
 
     // 清理工作：在组件卸载时关闭 WebSocket 并清除定时器
     return () => {
@@ -112,6 +137,7 @@ const App: React.FC = () => {
       id: uuidv4(),  // 使用 UUID 生成唯一 id
       text: message,
       imageUrl: image,
+      videoUrl: "",
       sender: username,
       senderId: localStorage.getItem('userId'),
       msgType: "msg",
@@ -161,8 +187,31 @@ const App: React.FC = () => {
           >
             <div className="text-xs font-bold">{msg.sender}</div>
             {msg.text && <div>{msg.text}</div>}
+            {/* 图片展示 */}
             {msg.imageUrl && (
-              <img src={msg.imageUrl} alt="Uploaded" className="max-w-full mt-2 rounded" />
+               <img
+                 src={msg.imageUrl} // 先设置默认的路径
+                 alt="Uploaded"
+                 className="max-w-full mt-2 rounded"
+                 onLoad={async (event) => {
+                   const imgUrl = await fetchBlobData(msg.imageUrl);
+                   (event.target as HTMLImageElement).src = imgUrl;  // 更新为 Blob URL
+                 }}
+               />
+            )}
+
+            {/* 视频展示 */}
+            {msg.videoUrl && (
+              <video
+                controls
+                className="max-w-full mt-2 rounded"
+                onLoadStart={async (event) => {
+                  const videoUrl = await fetchBlobData(msg.videoUrl);
+                  (event.target as HTMLVideoElement).src = videoUrl;  // 更新为 Blob URL
+                }}
+              >
+                Your browser does not support the video tag.
+              </video>
             )}
           </div>
         ))}
