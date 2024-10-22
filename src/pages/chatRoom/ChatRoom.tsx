@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 
 interface Message {
   id: number;
@@ -13,6 +13,7 @@ const App: React.FC = () => {
   const [image, setImage] = useState<string | null>(null);
   const [username, setUsername] = useState<string>('User');
   const fileInputRef = useRef<HTMLInputElement>(null); // 引用 input 元素
+  const messagesEndRef = useRef<HTMLDivElement>(null); // 引用消息列表底部
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -52,6 +53,13 @@ const App: React.FC = () => {
     }
   };
 
+  // 每当 messages 更新后，自动滚动到底部
+  useEffect(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages]);
+
   return (
     <div className="h-screen flex flex-col bg-gray-100">
       {/* Header */}
@@ -77,6 +85,8 @@ const App: React.FC = () => {
             )}
           </div>
         ))}
+        {/* 用于自动滚动到底部的占位元素 */}
+        <div ref={messagesEndRef}></div>
       </div>
 
       {/* Image Preview with Delete Option */}
