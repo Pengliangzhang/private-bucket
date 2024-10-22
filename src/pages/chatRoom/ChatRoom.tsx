@@ -184,11 +184,19 @@ const App: React.FC = () => {
     });
   }, [messages]);
 
+  // 每当消息或图片加载时，滚动到底部
   useEffect(() => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [messages]);
+
+  // 图片加载完成后滚动到底部
+  const handleImageLoad = () => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
 
   return (
     <div className="h-screen flex flex-col bg-gray-100">
@@ -218,6 +226,7 @@ const App: React.FC = () => {
                   src={imagePreviewUrl || imageCache[msg.imageUrl]}  // 使用本地预览或缓存的图片
                   alt="Uploaded"
                   className="max-w-full mt-2 rounded"
+                  onLoad={handleImageLoad}  // 图片加载完成后滚动到底部
                 />
               )}
 
@@ -229,6 +238,7 @@ const App: React.FC = () => {
                     const videoUrl = await fetchBlobData(msg.videoUrl);
                     (event.target as HTMLVideoElement).src = videoUrl;
                   }}
+                  onLoadedData={handleImageLoad}  // 视频加载完成后滚动到底部
                 >
                   Your browser does not support the video tag.
                 </video>
