@@ -1,21 +1,93 @@
 import { useState, useRef, useEffect } from 'react';
+import { v4 as uuidv4 } from 'uuid';
 
 interface Message {
-  id: number;
+  id: string; // 更改为 string
   text?: string;
   imageUrl?: string;
   sender: string;
+  senderId: string;
+  msgType: string;
 }
-// 创建 WebSocket 连接
-const socket = new WebSocket('ws://localhost:8086/v1/chat');
+
+const MAX_RETRIES = 5;  // 最大重试次数
+let retries = 0;
 
 const App: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [message, setMessage] = useState<string>('');
   const [image, setImage] = useState<string | null>(null);
   const [username, setUsername] = useState<string>('User');
+
   const fileInputRef = useRef<HTMLInputElement>(null); // 引用 input 元素
   const messagesEndRef = useRef<HTMLDivElement>(null); // 引用消息列表底部
+  const socketRef = useRef<WebSocket | null>(null); // 保存 WebSocket 实例
+  const reconnectIntervalRef = useRef<NodeJS.Timeout | null>(null); // 保存定时器
+  const isWebSocketInitialized = useRef(false); // 用来防止重复创建 WebSocket
+
+  // 创建 WebSocket 连接
+  const createWebSocket = () => {
+    if (isWebSocketInitialized.current) return;  // 确保只创建一次
+    console.log('Creating WebSocket connection...');
+
+    socketRef.current = new WebSocket('ws://192.168.68.117:8080/chatbox/v1/chat');
+    isWebSocketInitialized.current = true;
+
+    // 当 WebSocket 打开时
+    socketRef.current.onopen = () => {
+      if (reconnectIntervalRef.current) {
+        clearInterval(reconnectIntervalRef.current); // 停止重连
+      }
+      retries = 0;  // 重置重连次数
+      console.log('WebSocket connected');
+    };
+
+    // 当接收到消息时
+    socketRef.current.onmessage = (event) => {
+      const receivedMessage: Message = JSON.parse(event.data);
+      if (receivedMessage.msgType === "SYSTEM") {
+        return;
+      }
+      setMessages((prevMessages) => [...prevMessages, receivedMessage]);
+    };
+
+    // WebSocket 断开时，触发重连
+    socketRef.current.onclose = () => {
+      console.log('WebSocket closed, attempting to reconnect...');
+      if (retries < MAX_RETRIES) {
+        retries += 1;
+        reconnectIntervalRef.current = setInterval(() => {
+          console.log(`Reconnecting... attempt ${retries}`);
+          createWebSocket();  // 尝试重新连接
+        }, 5000);  // 每 5 秒重连一次
+      } else {
+        console.log('Max retries reached. Could not reconnect.');
+      }
+    };
+
+    // 错误处理
+    socketRef.current.onerror = (error) => {
+      console.error('WebSocket error:', error);
+    };
+  };
+
+  // 初始化 WebSocket 连接
+  useEffect(() => {
+    createWebSocket();
+    setUsername(localStorage.getItem('username'))
+
+    // 清理工作：在组件卸载时关闭 WebSocket 并清除定时器
+    return () => {
+      if (socketRef.current) {
+        if (socketRef.current.readyState === WebSocket.OPEN) {
+          socketRef.current.close();  // 只在连接打开时关闭 WebSocket
+        }
+      }
+      if (reconnectIntervalRef.current) {
+        clearInterval(reconnectIntervalRef.current);  // 清除重连定时器
+      }
+    };
+  }, []);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -26,10 +98,10 @@ const App: React.FC = () => {
       };
       reader.readAsDataURL(file);
     }
-    
+
     // 在选择文件后，强制重置 input 的值，以便允许再次选择相同文件
     if (fileInputRef.current) {
-      fileInputRef.current.value = ''; 
+      fileInputRef.current.value = '';
     }
   };
 
@@ -37,11 +109,18 @@ const App: React.FC = () => {
     if (!message.trim() && !image) return;
 
     const newMessage: Message = {
-      id: messages.length + 1,
+      id: uuidv4(),  // 使用 UUID 生成唯一 id
       text: message,
       imageUrl: image,
       sender: username,
+      senderId: localStorage.getItem('userId'),
+      msgType: "msg",
     };
+
+    // 通过 WebSocket 发送消息
+    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+      socketRef.current.send(JSON.stringify(newMessage));
+    }
 
     setMessages([...messages, newMessage]);
     setMessage('');
@@ -60,19 +139,6 @@ const App: React.FC = () => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
-
-    // 监听 WebSocket 消息
-    socket.onmessage = (event) => {
-      // const receivedMessage: Message = JSON.parse(event.data);
-      // setMessages((prevMessages) => [...prevMessages, receivedMessage]);
-      console.log(event);
-      
-    };
-
-    // 清理 WebSocket 连接
-    return () => {
-      socket.close();
-    };
   }, [messages]);
 
   return (

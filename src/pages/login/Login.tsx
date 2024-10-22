@@ -37,6 +37,8 @@ const Login: React.FC = () => {
       if (response.data.message === "Success") {
         localStorage.setItem('token', response.data?.data?.token);
         localStorage.setItem('role', response.data?.data?.role);
+        localStorage.setItem('username', response.data?.data?.username);
+        localStorage.setItem('userId', response.data?.data?.id);
         return navigate('/home');
       } else {
         setError('Invalid email or password');
