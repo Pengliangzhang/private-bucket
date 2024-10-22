@@ -11,8 +11,8 @@ interface FileItem {
 
 const FileList: React.FC = () => {
   const [files, setFiles] = useState<FileItem[]>([]); // 保存文件列表
-  const [selectedFile, setSelectedFile] = useState<FileItem | null>(null); // 当前选中的文件
-  const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null); // PDF 文件预览 URL
+  const [selectedFileIndex, setSelectedFileIndex] = useState<number | null>(null); // 当前选中的文件索引
+  const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null); // 文件预览 URL
   const [isPopupOpen, setIsPopupOpen] = useState<boolean>(false); // 控制弹窗的状态
   const [loading, setLoading] = useState<boolean>(false); // 加载状态
   const [, setError] = useState<string | null>(null);
@@ -32,15 +32,25 @@ const FileList: React.FC = () => {
       }
     };
     fetchFiles();
+
+    if (isPopupOpen) {
+      document.body.style.overflow = 'hidden'; // 禁用滚动
+    } else {
+      document.body.style.overflow = ''; // 恢复滚动
+    }
+
+    // 在组件卸载时或状态改变时清理样式
+    return () => {
+      document.body.style.overflow = '';
+    };
   }, []);
 
-  // 获取 PDF 文件并创建 Blob URL
+  // 获取文件并创建 Blob URL
   const fetchFilePreview = async (file: FileItem) => {
     setLoading(true);  // 设置加载中状态
     setError(null);  // 清除上次的错误信息
     try {
       const response = await axiosInstance.get(`/photos/download/${file.fileId}`, {
-      // const response = await axiosInstance.get(`/photos/download/6716a1fe6bc255264a899b21`, {
         responseType: 'blob', // 设置响应类型为 blob
       });
 
@@ -48,7 +58,6 @@ const FileList: React.FC = () => {
       const url = URL.createObjectURL(response.data);
       setFileType(response.data.type); // 获取 Blob 的 MIME 类型
       setFilePreviewUrl(url);
-      setSelectedFile(file);
       setIsPopupOpen(true); // 打开弹窗
     } catch (error) {
       setError('获取文件预览失败');
@@ -57,18 +66,37 @@ const FileList: React.FC = () => {
       setLoading(false);  // 完成加载
     }
   };
-  const isImage = fileType?.startsWith("image/");
-  const isVideo = fileType?.startsWith("video/");
-  const isIframeContent = fileType === "application/pdf" || fileType === "text/html";
+
+  // 预览下一个文件
+  const previewNextFile = () => {
+    if (selectedFileIndex !== null && selectedFileIndex < files.length - 1) {
+      const nextIndex = selectedFileIndex + 1;
+      setSelectedFileIndex(nextIndex);
+      fetchFilePreview(files[nextIndex]);
+    }
+  };
+
+  // 预览上一个文件
+  const previewPreviousFile = () => {
+    if (selectedFileIndex !== null && selectedFileIndex > 0) {
+      const prevIndex = selectedFileIndex - 1;
+      setSelectedFileIndex(prevIndex);
+      fetchFilePreview(files[prevIndex]);
+    }
+  };
+
+  const isImage = fileType?.startsWith('image/');
+  const isVideo = fileType?.startsWith('video/');
+  const isIframeContent = fileType === 'application/pdf' || fileType === 'text/html';
 
   return (
-    <div className="container mx-auto p-4 mt-16">
+    <div className="container mx-auto p-4 mt-24">
       {loading && <Loading />}
       <h1 className="text-3xl font-bold mb-8">文件列表</h1>
 
       {/* 文件列表按更新时间排序并以一行一行显示 */}
       <ul className="space-y-4">
-        {files.map((file) => (
+        {files.map((file, index) => (
           <li key={file.fileId} className="flex justify-between items-center bg-white shadow p-4 rounded">
             <div className="flex-1 min-w-0">
               <h2 className="text-lg font-bold break-words whitespace-normal max-w-full">{file.fileName}</h2>
@@ -76,7 +104,10 @@ const FileList: React.FC = () => {
             </div>
             <button
               className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 ml-4 flex-shrink-0"
-              onClick={() => fetchFilePreview(file)}
+              onClick={() => {
+                setSelectedFileIndex(index); // 设置当前选中的文件索引
+                fetchFilePreview(file); // 加载文件预览
+              }}
             >
               预览
             </button>
@@ -84,10 +115,8 @@ const FileList: React.FC = () => {
         ))}
       </ul>
 
-
-
       {/* 弹窗，用于预览和更新 PDF 文件 */}
-      {isPopupOpen && (
+      {isPopupOpen && selectedFileIndex !== null && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-lg max-w-lg w-full relative">
             <button
@@ -97,22 +126,16 @@ const FileList: React.FC = () => {
               关闭
             </button>
             <h2 className="text-xl font-bold mb-4">
-              {selectedFile ? `预览文件: ${selectedFile.fileName}` : '加载中...'}
+              {files[selectedFileIndex].fileName}
             </h2>
 
             {loading ? (
               <div className="flex justify-center items-center h-64">
-                <p>加载中...</p> {/* 显示加载中的信息 */}
+                <p>加载中...</p>
               </div>
             ) : (
               filePreviewUrl && (
-                <div className="width: '100%', height: '100%' mb-4">
-                  {/* <iframe
-                    src={filePreviewUrl}
-                    className="w-full h-64"
-                    title="资源预览"
-                    
-                  ></iframe> */}
+                <div className="w-full h-64 mb-4">
                   {isImage ? (
                     <img
                       src={filePreviewUrl!}
@@ -125,7 +148,7 @@ const FileList: React.FC = () => {
                       src={filePreviewUrl!}
                       className="w-full h-64"
                       controls
-                      controlsList="nodownload" // 禁用下载选项
+                      controlsList="nodownload"
                       onContextMenu={(e) => e.preventDefault()} // 禁用右键菜单
                     >
                       您的浏览器不支持视频播放。
@@ -140,9 +163,26 @@ const FileList: React.FC = () => {
                     <p>不支持的文件类型</p>
                   )}
                 </div>
-
               )
             )}
+
+            {/* 上下切换按钮 */}
+            <div className="flex justify-between mt-4">
+              <button
+                className="bg-gray-500 text-white px-3 py-1 rounded hover:bg-gray-600"
+                onClick={previewPreviousFile}
+                disabled={selectedFileIndex === 0}
+              >
+                上一个
+              </button>
+              <button
+                className="bg-gray-500 text-white px-3 py-1 rounded hover:bg-gray-600"
+                onClick={previewNextFile}
+                disabled={selectedFileIndex === files.length - 1}
+              >
+                下一个
+              </button>
+            </div>
           </div>
         </div>
       )}

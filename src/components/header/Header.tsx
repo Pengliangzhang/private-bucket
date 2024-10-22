@@ -33,13 +33,6 @@ const Header: React.FC = () => {
         <ul className={`sm:flex space-x-4 ${showMenu ? 'flex flex-col items-end' : 'hidden'} sm:block`}>
           {isAuthenticated() ? (
             <>
-              {showMenu && (
-                <li>
-                  <Link to="/home" className={`hover:text-gray-300 visibility: ${showMenu ? 'visible' : 'hidden'}`}>
-                    主页
-                  </Link>
-                </li>
-              )}
               <li>
                 <Link to="/fileList" className="hover:text-gray-300">
                   资源列表
@@ -52,7 +45,7 @@ const Header: React.FC = () => {
               </li>
               <li>
                 <button onClick={handleLogout} className="hover:text-gray-300">
-                  登出
+                  退出登录
                 </button>
               </li>
             </>
