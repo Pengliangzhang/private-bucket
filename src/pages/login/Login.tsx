@@ -35,7 +35,8 @@ const Login: React.FC = () => {
       });
       
       if (response.data.message === "Success") {
-        localStorage.setItem('token', response.data.data);
+        localStorage.setItem('token', response.data?.data?.token);
+        localStorage.setItem('role', response.data?.data?.role);
         return navigate('/home');
       } else {
         setError('Invalid email or password');
