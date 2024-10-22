@@ -18,10 +18,13 @@ let retries = 0;
 const App: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [message, setMessage] = useState<string>('');
-  const [image, setImage] = useState<string | null>(null);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);  // 保存上传后的 imageUrl
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);  // 直接渲染上传的图片
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [username, setUsername] = useState<string>('User');
   const [userId, setUserId] = useState<string>('');
-  
+  const [imageCache, setImageCache] = useState<{ [key: string]: string }>({});  // 用来缓存从服务器获取到的图片
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const socketRef = useRef<WebSocket | null>(null);
@@ -107,14 +110,31 @@ const App: React.FC = () => {
     };
   }, []);
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // 处理文件上传，上传后保存文件 ID 到 imageUrl 或 videoUrl，并直接预览上传的图片
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setImage(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+      const formData = new FormData();
+      formData.append('file', file);  // 将文件添加到 formData 中
+
+      // 创建本地预览 URL，用于即时显示
+      const previewUrl = URL.createObjectURL(file);
+      setImagePreviewUrl(previewUrl);  // 直接预览图片
+
+      try {
+        const response = await axiosInstance.post('/photos/upload', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        const fileId = response.data.data;  // 假设服务器返回的 ID 是 fileId
+
+        if (file.type.startsWith('image/')) {
+          setImageUrl(fileId);  // 如果是图片，保存到 imageUrl
+        } else if (file.type.startsWith('video/')) {
+          setVideoUrl(fileId);  // 如果是视频，保存到 videoUrl
+        }
+      } catch (error) {
+        console.error('File upload error:', error);
+      }
     }
 
     if (fileInputRef.current) {
@@ -123,15 +143,15 @@ const App: React.FC = () => {
   };
 
   const sendMessage = () => {
-    if (!message.trim() && !image) return;
+    if (!message.trim() && !imageUrl && !videoUrl) return;
 
     const newMessage: Message = {
       id: uuidv4(),
       text: message,
-      imageUrl: image,
-      videoUrl: "",
+      imageUrl: imageUrl || null,
+      videoUrl: videoUrl || null,
       sender: username,
-      senderId: userId,  // 确保使用 userId，而不是 username
+      senderId: userId,
       msgType: "msg",
     };
 
@@ -141,15 +161,28 @@ const App: React.FC = () => {
 
     setMessages([...messages, newMessage]);
     setMessage('');
-    setImage(null);
+    setImageUrl(null);
+    setVideoUrl(null);
+    setImagePreviewUrl(null);  // 清除预览
   };
 
   const deleteImage = () => {
-    setImage(null);
+    setImagePreviewUrl(null);  // 删除本地预览
+    setImageUrl(null);  // 清空 imageUrl
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
   };
+
+  // 当聊天记录中有图片时，通过 useEffect 获取图片 Blob 数据并缓存
+  useEffect(() => {
+    messages.forEach(async (msg) => {
+      if (msg.imageUrl && !imageCache[msg.imageUrl]) {  // 如果图片未缓存，则从服务器获取
+        const imageUrl = await fetchBlobData(msg.imageUrl);
+        setImageCache((prevCache) => ({ ...prevCache, [msg.imageUrl]: imageUrl }));
+      }
+    });
+  }, [messages]);
 
   useEffect(() => {
     if (messagesEndRef.current) {
@@ -169,25 +202,22 @@ const App: React.FC = () => {
         {messages.map((msg) => (
           <div
             key={msg.id}
-            className={`flex ${msg.senderId === userId ? 'justify-end' : 'justify-start'}`}  // 确保父容器有 flex 布局
+            className={`flex ${msg.senderId === userId ? 'justify-end' : 'justify-start'}`}
           >
             <div className={`p-2 rounded-md max-w-[70%] ${
               msg.senderId === userId
-                ? 'bg-blue-500 text-white self-end'  // 自己的消息靠右，背景为蓝色
-                : 'bg-white text-black self-start'  // 别人的消息靠左，背景为白色
+                ? 'bg-blue-500 text-white self-end'
+                : 'bg-white text-black self-start'
             }`}>
               <div className="text-xs font-bold">{msg.sender}</div>
               {msg.text && <div>{msg.text}</div>}
               
+              {/* 如果是从聊天记录中获取到的图片，需要从服务器获取 */}
               {msg.imageUrl && (
                 <img
-                  src={msg.imageUrl}
+                  src={imagePreviewUrl || imageCache[msg.imageUrl]}  // 使用本地预览或缓存的图片
                   alt="Uploaded"
                   className="max-w-full mt-2 rounded"
-                  onLoad={async (event) => {
-                    const imgUrl = await fetchBlobData(msg.imageUrl);
-                    (event.target as HTMLImageElement).src = imgUrl;
-                  }}
                 />
               )}
 
@@ -210,9 +240,9 @@ const App: React.FC = () => {
       </div>
 
       {/* Image Preview with Delete Option */}
-      {image && (
+      {imagePreviewUrl && (
         <div className="p-4 bg-white flex items-center justify-between sm:max-w-sm mx-auto">
-          <img src={image} alt="Preview" className="max-w-xs max-h-32 object-cover rounded-md" />
+          <img src={imagePreviewUrl} alt="Preview" className="max-w-xs max-h-32 object-cover rounded-md" />
           <button
             onClick={deleteImage}
             className="bg-red-500 text-white p-1 ml-4 rounded-md hover:bg-red-600"
@@ -237,13 +267,13 @@ const App: React.FC = () => {
 
         <input
           type="file"
-          accept="image/*"
-          onChange={handleImageUpload}
+          accept="image/*,video/*"
+          onChange={handleFileUpload}
           className="hidden"
-          id="imageUpload"
+          id="fileUpload"
           ref={fileInputRef}
         />
-        <label htmlFor="imageUpload" className="cursor-pointer bg-gray-200 p-2 rounded-md">
+        <label htmlFor="fileUpload" className="cursor-pointer bg-gray-200 p-2 rounded-md">
           📷
         </label>
 
