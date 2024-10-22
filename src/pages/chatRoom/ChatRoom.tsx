@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
-import axiosInstance from '../../axiosInstance'
+import axiosInstance from '../../axiosInstance';
 import { v4 as uuidv4 } from 'uuid';
 
 interface Message {
-  id: string; // 更改为 string
+  id: string;
   text?: string;
   imageUrl?: string;
   videoUrl?: string;
@@ -12,7 +12,7 @@ interface Message {
   msgType: string;
 }
 
-const MAX_RETRIES = 5;  // 最大重试次数
+const MAX_RETRIES = 5;
 let retries = 0;
 
 const App: React.FC = () => {
@@ -20,31 +20,29 @@ const App: React.FC = () => {
   const [message, setMessage] = useState<string>('');
   const [image, setImage] = useState<string | null>(null);
   const [username, setUsername] = useState<string>('User');
+  const [userId, setUserId] = useState<string>('');
+  
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const socketRef = useRef<WebSocket | null>(null);
+  const reconnectIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const isWebSocketInitialized = useRef(false);
 
-  const fileInputRef = useRef<HTMLInputElement>(null); // 引用 input 元素
-  const messagesEndRef = useRef<HTMLDivElement>(null); // 引用消息列表底部
-  const socketRef = useRef<WebSocket | null>(null); // 保存 WebSocket 实例
-  const reconnectIntervalRef = useRef<NodeJS.Timeout | null>(null); // 保存定时器
-  const isWebSocketInitialized = useRef(false); // 用来防止重复创建 WebSocket
-
-  // 创建 WebSocket 连接
   const createWebSocket = () => {
-    if (isWebSocketInitialized.current) return;  // 确保只创建一次
+    if (isWebSocketInitialized.current) return;
     console.log('Creating WebSocket connection...');
 
     socketRef.current = new WebSocket('ws://192.168.68.117:8080/chatbox/v1/chat');
     isWebSocketInitialized.current = true;
 
-    // 当 WebSocket 打开时
     socketRef.current.onopen = () => {
       if (reconnectIntervalRef.current) {
-        clearInterval(reconnectIntervalRef.current); // 停止重连
+        clearInterval(reconnectIntervalRef.current);
       }
-      retries = 0;  // 重置重连次数
+      retries = 0;
       console.log('WebSocket connected');
     };
 
-    // 当接收到消息时
     socketRef.current.onmessage = (event) => {
       const receivedMessage: Message = JSON.parse(event.data);
       if (receivedMessage.msgType === "SYSTEM") {
@@ -53,33 +51,30 @@ const App: React.FC = () => {
       setMessages((prevMessages) => [...prevMessages, receivedMessage]);
     };
 
-    // WebSocket 断开时，触发重连
     socketRef.current.onclose = () => {
       console.log('WebSocket closed, attempting to reconnect...');
       if (retries < MAX_RETRIES) {
         retries += 1;
         reconnectIntervalRef.current = setInterval(() => {
           console.log(`Reconnecting... attempt ${retries}`);
-          createWebSocket();  // 尝试重新连接
-        }, 5000);  // 每 5 秒重连一次
+          createWebSocket();
+        }, 5000);
       } else {
         console.log('Max retries reached. Could not reconnect.');
       }
     };
 
-    // 错误处理
     socketRef.current.onerror = (error) => {
       console.error('WebSocket error:', error);
     };
   };
 
   const fetchBlobData = async (fileId: string) => {
-    // const response = await fetch(`http://localhost:8080/api/file/${fileName}`);
     const response = await axiosInstance.get(`/photos/download/${fileId}`, {
-      responseType: 'blob', // 设置响应类型为 blob
+      responseType: 'blob',
     });
     const blob = await response.data;
-    return URL.createObjectURL(blob);  // 创建一个对象 URL
+    return URL.createObjectURL(blob);
   };
 
   const fetchMessages = async () => {
@@ -88,28 +83,26 @@ const App: React.FC = () => {
       const sortedFiles = response.data.data.sort((a: Message, b: Message) => {
         return new Date(a['createDatetime']).getTime() - new Date(b['createDatetime']).getTime();
       });
-      // const data = response.data.data;
       setMessages(sortedFiles);
     } catch (error) {
       console.error("Error fetching messages:", error);
     }
   };
 
-  // 初始化 WebSocket 连接
   useEffect(() => {
     createWebSocket();
-    setUsername(localStorage.getItem('username'))
-    fetchMessages()
+    setUsername(localStorage.getItem('username') || 'User');
+    setUserId(localStorage.getItem('userId') || '');
+    fetchMessages();
 
-    // 清理工作：在组件卸载时关闭 WebSocket 并清除定时器
     return () => {
       if (socketRef.current) {
         if (socketRef.current.readyState === WebSocket.OPEN) {
-          socketRef.current.close();  // 只在连接打开时关闭 WebSocket
+          socketRef.current.close();
         }
       }
       if (reconnectIntervalRef.current) {
-        clearInterval(reconnectIntervalRef.current);  // 清除重连定时器
+        clearInterval(reconnectIntervalRef.current);
       }
     };
   }, []);
@@ -119,12 +112,11 @@ const App: React.FC = () => {
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
-        setImage(reader.result as string); // 预览图片的 Base64 编码
+        setImage(reader.result as string);
       };
       reader.readAsDataURL(file);
     }
 
-    // 在选择文件后，强制重置 input 的值，以便允许再次选择相同文件
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -134,33 +126,31 @@ const App: React.FC = () => {
     if (!message.trim() && !image) return;
 
     const newMessage: Message = {
-      id: uuidv4(),  // 使用 UUID 生成唯一 id
+      id: uuidv4(),
       text: message,
       imageUrl: image,
       videoUrl: "",
       sender: username,
-      senderId: localStorage.getItem('userId'),
+      senderId: userId,  // 确保使用 userId，而不是 username
       msgType: "msg",
     };
 
-    // 通过 WebSocket 发送消息
     if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
       socketRef.current.send(JSON.stringify(newMessage));
     }
 
     setMessages([...messages, newMessage]);
     setMessage('');
-    setImage(null); // 发送后清空图片预览
+    setImage(null);
   };
 
   const deleteImage = () => {
-    setImage(null); // 清除预览的图片
+    setImage(null);
     if (fileInputRef.current) {
-      fileInputRef.current.value = ''; // 清空 input 的值以确保可以再次选择同一张图片
+      fileInputRef.current.value = '';
     }
   };
 
-  // 每当 messages 更新后，自动滚动到底部
   useEffect(() => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
@@ -179,43 +169,43 @@ const App: React.FC = () => {
         {messages.map((msg) => (
           <div
             key={msg.id}
-            className={`p-2 rounded-md max-w-xs ${
-              msg.sender === username
-                ? 'bg-blue-500 text-white self-end'
-                : 'bg-gray-300 text-black self-start'
-            }`}
+            className={`flex ${msg.senderId === userId ? 'justify-end' : 'justify-start'}`}  // 确保父容器有 flex 布局
           >
-            <div className="text-xs font-bold">{msg.sender}</div>
-            {msg.text && <div>{msg.text}</div>}
-            {/* 图片展示 */}
-            {msg.imageUrl && (
-               <img
-                 src={msg.imageUrl} // 先设置默认的路径
-                 alt="Uploaded"
-                 className="max-w-full mt-2 rounded"
-                 onLoad={async (event) => {
-                   const imgUrl = await fetchBlobData(msg.imageUrl);
-                   (event.target as HTMLImageElement).src = imgUrl;  // 更新为 Blob URL
-                 }}
-               />
-            )}
+            <div className={`p-2 rounded-md max-w-[70%] ${
+              msg.senderId === userId
+                ? 'bg-blue-500 text-white self-end'  // 自己的消息靠右，背景为蓝色
+                : 'bg-white text-black self-start'  // 别人的消息靠左，背景为白色
+            }`}>
+              <div className="text-xs font-bold">{msg.sender}</div>
+              {msg.text && <div>{msg.text}</div>}
+              
+              {msg.imageUrl && (
+                <img
+                  src={msg.imageUrl}
+                  alt="Uploaded"
+                  className="max-w-full mt-2 rounded"
+                  onLoad={async (event) => {
+                    const imgUrl = await fetchBlobData(msg.imageUrl);
+                    (event.target as HTMLImageElement).src = imgUrl;
+                  }}
+                />
+              )}
 
-            {/* 视频展示 */}
-            {msg.videoUrl && (
-              <video
-                controls
-                className="max-w-full mt-2 rounded"
-                onLoadStart={async (event) => {
-                  const videoUrl = await fetchBlobData(msg.videoUrl);
-                  (event.target as HTMLVideoElement).src = videoUrl;  // 更新为 Blob URL
-                }}
-              >
-                Your browser does not support the video tag.
-              </video>
-            )}
+              {msg.videoUrl && (
+                <video
+                  controls
+                  className="max-w-full mt-2 rounded"
+                  onLoadStart={async (event) => {
+                    const videoUrl = await fetchBlobData(msg.videoUrl);
+                    (event.target as HTMLVideoElement).src = videoUrl;
+                  }}
+                >
+                  Your browser does not support the video tag.
+                </video>
+              )}
+            </div>
           </div>
         ))}
-        {/* 用于自动滚动到底部的占位元素 */}
         <div ref={messagesEndRef}></div>
       </div>
 
@@ -245,14 +235,13 @@ const App: React.FC = () => {
           }}
         />
 
-        {/* 图片上传按钮 */}
         <input
           type="file"
           accept="image/*"
           onChange={handleImageUpload}
           className="hidden"
           id="imageUpload"
-          ref={fileInputRef} // 绑定 input 的 ref
+          ref={fileInputRef}
         />
         <label htmlFor="imageUpload" className="cursor-pointer bg-gray-200 p-2 rounded-md">
           📷
