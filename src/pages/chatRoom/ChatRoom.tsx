@@ -6,6 +6,8 @@ interface Message {
   imageUrl?: string;
   sender: string;
 }
+// 创建 WebSocket 连接
+const socket = new WebSocket('ws://localhost:8086/v1/chat');
 
 const App: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -58,6 +60,19 @@ const App: React.FC = () => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
+
+    // 监听 WebSocket 消息
+    socket.onmessage = (event) => {
+      // const receivedMessage: Message = JSON.parse(event.data);
+      // setMessages((prevMessages) => [...prevMessages, receivedMessage]);
+      console.log(event);
+      
+    };
+
+    // 清理 WebSocket 连接
+    return () => {
+      socket.close();
+    };
   }, [messages]);
 
   return (
