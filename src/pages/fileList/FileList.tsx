@@ -43,7 +43,7 @@ const FileList: React.FC = () => {
     return () => {
       document.body.style.overflow = '';
     };
-  }, []);
+  }, [isPopupOpen]);
 
   // 获取文件并创建 Blob URL
   const fetchFilePreview = async (file: FileItem) => {

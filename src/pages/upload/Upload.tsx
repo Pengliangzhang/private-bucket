@@ -50,25 +50,12 @@ const UploadFile: React.FC = () => {
   };
 
   return (
-    <div className="flex items-center justify-center h-screen bg-gray-100">
+    <div className="flex items-center justify-center h-screen bg-gray-100 mt-8">
       <div className="w-full max-w-md p-8 space-y-6 bg-white rounded-lg shadow-md">
         {!uploadSuccess ? (
           <>
             <h2 className="text-2xl font-bold text-center">上传文件</h2>
             <form onSubmit={handleSubmit} className="space-y-4">
-              {/* 报告编号输入框 */}
-              {/* <div>
-                <label className="block mb-2 text-sm font-medium text-gray-700">报告编号:</label>
-                <input
-                  type="text"
-                  value={reportNumber}
-                  onChange={(e) => setReportNumber(e.target.value)}
-                  className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder="请输入报告编号"
-                />
-              </div> */}
-
-              {/* 文件选择输入框 */}
               <div>
                 <label className="block mb-2 text-sm font-medium text-gray-700">选择照片:</label>
                 <input

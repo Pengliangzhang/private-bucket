@@ -6,6 +6,7 @@ import Login from './pages/login/Login'
 import UploadFile from './pages/upload/Upload'
 import Header from './components/header/Header'
 import FileList from './pages/fileList/FileList'
+import ChatRoom from './pages/chatRoom/ChatRoom'
 import NotFound from './pages/notFound/NotFound'; // 引入 404 页面
 
 function App() {
@@ -37,6 +38,14 @@ function App() {
           element={
             <PrivateRoute>
               <FileList />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/chatRoom"
+          element={
+            <PrivateRoute>
+              <ChatRoom />
             </PrivateRoute>
           }
         />
